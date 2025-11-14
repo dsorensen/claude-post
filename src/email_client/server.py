@@ -29,6 +29,7 @@ EMAIL_CONFIG = {
     "email": os.getenv("EMAIL_ADDRESS", "your.email@gmail.com"),
     "password": os.getenv("EMAIL_PASSWORD", "your-app-specific-password"),
     "imap_server": os.getenv("IMAP_SERVER", "imap.gmail.com"),
+    "imap_port": int(os.getenv("IMAP_PORT", "993")),
     "smtp_server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port": int(os.getenv("SMTP_PORT", "587"))
 }
@@ -78,7 +79,7 @@ def format_email_content(msg_data: tuple) -> dict:
         "content": body
     }
 
-async def search_emails_async(mail: imaplib.IMAP4_SSL, search_criteria: str) -> list[dict]:
+async def search_emails_async(mail: imaplib.IMAP4, search_criteria: str) -> list[dict]:
     """Asynchronously search emails with timeout."""
     loop = asyncio.get_event_loop()
     try:
@@ -95,7 +96,7 @@ async def search_emails_async(mail: imaplib.IMAP4_SSL, search_criteria: str) -> 
     except Exception as e:
         raise Exception(f"Error searching emails: {str(e)}")
 
-async def get_email_content_async(mail: imaplib.IMAP4_SSL, email_id: str) -> dict:
+async def get_email_content_async(mail: imaplib.IMAP4, email_id: str) -> dict:
     """Asynchronously get full content of a specific email."""
     loop = asyncio.get_event_loop()
     try:
@@ -104,7 +105,7 @@ async def get_email_content_async(mail: imaplib.IMAP4_SSL, email_id: str) -> dic
     except Exception as e:
         raise Exception(f"Error fetching email content: {str(e)}")
 
-async def count_emails_async(mail: imaplib.IMAP4_SSL, search_criteria: str) -> int:
+async def count_emails_async(mail: imaplib.IMAP4, search_criteria: str) -> int:
     """Asynchronously count emails matching the search criteria."""
     loop = asyncio.get_event_loop()
     try:
@@ -134,15 +135,12 @@ async def send_email_async(
         
         # Connect to SMTP server and send email
         def send_sync():
-            with smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"]) as server:
+            # Use SMTP_SSL for Proton Mail Bridge
+            with smtplib.SMTP_SSL(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"]) as server:
                 server.set_debuglevel(1)  # Enable debug output
                 logging.debug(f"Connecting to {EMAIL_CONFIG['smtp_server']}:{EMAIL_CONFIG['smtp_port']}")
                 
-                # Start TLS
-                logging.debug("Starting TLS")
-                server.starttls()
-                
-                # Login
+                # Login (no STARTTLS needed with SMTP_SSL)
                 logging.debug(f"Logging in as {EMAIL_CONFIG['email']}")
                 server.login(EMAIL_CONFIG["email"], EMAIL_CONFIG["password"])
                 
@@ -311,7 +309,9 @@ async def handle_call_tool(
                 )]
         
         # Connect to IMAP server using predefined credentials
-        mail = imaplib.IMAP4_SSL(EMAIL_CONFIG["imap_server"])
+        # Use IMAP4 with STARTTLS for Proton Mail Bridge
+        mail = imaplib.IMAP4(EMAIL_CONFIG["imap_server"], EMAIL_CONFIG["imap_port"])
+        mail.starttls()
         mail.login(EMAIL_CONFIG["email"], EMAIL_CONFIG["password"])
         
         if name == "search-emails":
